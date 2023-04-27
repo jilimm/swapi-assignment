@@ -48,7 +48,10 @@ public class InformationService {
 
     public InformationResponse getInformation() {
 
+        // TODO: webflux can be done in parallel
         ResponseStarship responseStarship = getStarshipOfDarthVader();
+        // ensure null starship gives empty json
+        // https://stackoverflow.com/questions/44837846/spring-boot-return-a-empty-json-instead-of-empty-body-when-returned-object-is-n
         long crewNumber = getCrewOnDeathStar();
         boolean isLeiaOnAlderaan = isLeiaOnAlderaan();
 
@@ -79,8 +82,12 @@ public class InformationService {
                 .filter(array -> array.size() > 0)
                 .map(array -> array.get(0))
                 .map(JsonNode::asText)
+                // TODO: check that url is correct??? idk
                 .orElse(null);
-        // TODO: return empty json if no starship url
+
+        if (StringUtils.isBlank(starshipUrl)) {
+            return new ResponseStarship(); // will return empty json body
+        }
 
         System.out.println("Starship URL: "+starshipUrl);
         String starshipUrlPath = starshipUrl.replaceAll(swapiBaseUrl, StringUtils.EMPTY);
@@ -169,7 +176,7 @@ public class InformationService {
         }
 
         boolean residentIds = StreamSupport
-                .stream(residents.spliterator(), false)
+                .stream(residents.spliterator(), false) // FIXME: stream can be parallel?
                 .map(JsonNode::asText)
                 .peek(System.out::println)
                 .map(s -> {
