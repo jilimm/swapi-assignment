@@ -27,7 +27,7 @@ public class ExternalWebClients  {
 
     private static ExchangeFilterFunction logRequest() {
         return ExchangeFilterFunction.ofRequestProcessor(clientRequest -> {
-            System.out.println("---INFO: "+clientRequest.logPrefix() + clientRequest.method() + " " + clientRequest.url());
+            System.out.println("***INFO: "+clientRequest.logPrefix() + clientRequest.method() + " " + clientRequest.url());
             return Mono.just(clientRequest);
         });
     }
@@ -35,7 +35,7 @@ public class ExternalWebClients  {
 
     private static ExchangeFilterFunction logResponse() {
         return ExchangeFilterFunction.ofResponseProcessor(clientResponse -> {
-            System.out.println("---INFO: "+clientResponse.logPrefix()+" Response status: "+ clientResponse.statusCode());
+            System.out.println("***INFO: "+clientResponse.logPrefix()+" Response status: "+ clientResponse.statusCode());
             return Mono.just(clientResponse);
         });
     }

@@ -14,8 +14,12 @@ public class InformationController {
     InformationService informationService;
 
     @GetMapping("/information")
-    public Mono<InformationResponse> getInformation() {
+    public InformationResponse getInformation() {
         // TODO: to implement
-        return informationService.getInformation();
+        long timenow = System.currentTimeMillis();
+        InformationResponse responseMono = informationService.getInformation().block();
+        long timeend = System.currentTimeMillis();
+        System.out.println("time elapsed: "+ (timeend-timenow));
+        return responseMono;
     }
 }

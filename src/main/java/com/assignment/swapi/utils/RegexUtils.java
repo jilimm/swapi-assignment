@@ -28,14 +28,9 @@ public class RegexUtils {
     }
 
     public Integer extractStarShipIdFromUrl(String url) {
-        // TODO: create pattern from
-
-        System.out.println("---- pattern for getting starship id ----");
-        System.out.println(REGEX_SWAPI_STARSHIP_EXTRACT_ID.pattern());
         Matcher m = REGEX_SWAPI_STARSHIP_EXTRACT_ID.matcher(url);
         if(m.matches()) {
             String id = m.group(1);
-            System.out.println("The starship ID is " + id);
             if (StringUtils.isBlank(id)) {
                 return null;
             }
@@ -51,11 +46,9 @@ public class RegexUtils {
     }
 
     public Integer extractPeopleIdFromUrl(String url) {
-        System.out.println(REGEX_SWAPI_PEOPLE_EXTRACT_ID.pattern());
         Matcher m = REGEX_SWAPI_PEOPLE_EXTRACT_ID.matcher(url);
         if(m.matches()) {
             String id = m.group(1);
-            System.out.println("The starship ID is " + id);
             if (StringUtils.isBlank(id)) {
                 return null;
             }

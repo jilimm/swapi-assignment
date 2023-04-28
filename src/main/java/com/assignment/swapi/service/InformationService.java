@@ -59,7 +59,8 @@ public class InformationService {
 
     public Mono<InformationResponse> getInformation() {
 
-        // TODO: webflux can be done in parallel
+        // TODO: webflux can be done in parallel???
+        
         String  starShipUrl = getStarshipUrlOfDarthVader();
         Mono<ResponseStarship> responseStarship = getStarShipInformationFromUrl(starShipUrl);
         // ensure null starship gives empty json
