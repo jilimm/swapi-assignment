@@ -60,8 +60,8 @@ public class InformationService {
     public Mono<InformationResponse> getInformation() {
 
         // TODO: webflux can be done in parallel???
-        
-        String  starShipUrl = getStarshipUrlOfDarthVader();
+        // TODO: try blocking everything & compare performance???
+        String  starShipUrl = getStarshipUrlOfDarthVader(); // TODO: this is still blocking!!! combine this mono with the response starship mono????
         Mono<ResponseStarship> responseStarship = getStarShipInformationFromUrl(starShipUrl);
         // ensure null starship gives empty json
         // https://stackoverflow.com/questions/44837846/spring-boot-return-a-empty-json-instead-of-empty-body-when-returned-object-is-n
