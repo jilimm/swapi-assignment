@@ -2,6 +2,7 @@ package com.assignment.swapi.service;
 
 import com.assignment.swapi.models.response.InformationResponse;
 import com.assignment.swapi.models.response.ResponseStarship;
+import com.assignment.swapi.utils.RegexUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.lang3.StringUtils;
@@ -14,16 +15,13 @@ import org.springframework.web.reactive.function.client.WebClient;
 import java.text.NumberFormat;
 import java.text.ParseException;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.StreamSupport;
 
 @Service
 public class InformationService {
 
-    @Value("${swapi.url}")
-    private String swapiBaseUrl;
     @Value("${swapi.url.path}")
     private String swapiPath;
     @Value("${swapi.url.people}")
@@ -45,11 +43,15 @@ public class InformationService {
     @Qualifier("swapiWebClient")
     private WebClient webClient;
 
+    @Autowired
+    private RegexUtils regexUtils;
+
 
     public InformationResponse getInformation() {
 
         // TODO: webflux can be done in parallel
-        ResponseStarship responseStarship = getStarshipOfDarthVader();
+        String  starShipUrl = getStarshipUrlOfDarthVader();
+        ResponseStarship responseStarship = getStarShipInformationFromUrl(starShipUrl);
         // ensure null starship gives empty json
         // https://stackoverflow.com/questions/44837846/spring-boot-return-a-empty-json-instead-of-empty-body-when-returned-object-is-n
         long crewNumber = getCrewOnDeathStar();
@@ -59,7 +61,7 @@ public class InformationService {
     }
 
 
-    private ResponseStarship getStarshipOfDarthVader() {
+    private String getStarshipUrlOfDarthVader() {
         // get darth vader information
         // get starship url --> ping the starship???
         System.out.println("---- getting starship of darth vader-----");
@@ -85,17 +87,28 @@ public class InformationService {
                 // TODO: check that url is correct??? idk
                 .orElse(null);
 
-        if (StringUtils.isBlank(starshipUrl)) {
+        return starshipUrl;
+
+    }
+
+    private ResponseStarship getStarShipInformationFromUrl(String urlPath) {
+
+        if (StringUtils.isBlank(urlPath)) {
             return new ResponseStarship(); // will return empty json body
         }
 
-        System.out.println("Starship URL: "+starshipUrl);
-        String starshipUrlPath = starshipUrl.replaceAll(swapiBaseUrl, StringUtils.EMPTY);
+        System.out.println("Starship URL: "+urlPath);
+        Integer starShipId = regexUtils.extractStarShipIdFromUrl(urlPath);
+
+        if (starShipId == null) {
+            return new ResponseStarship(); // startship id is null / not valid
+        }
 
         ResponseStarship starshipInformation = webClient.get()
                 .uri(uriBuilder -> uriBuilder
-                        .path(starshipUrlPath)
-                        .build())
+                        .path(swapiPath)
+                        .build(starshipsResource, starShipId)
+                        )
                 .retrieve()
                 .bodyToMono(ResponseStarship.class)
                 .block();
@@ -156,15 +169,6 @@ public class InformationService {
             System.out.println(alderaanInformation.toPrettyString());
         }
 
-
-        String regexToExtractIdFromUrl = swapiBaseUrl
-                .replaceAll(".", "\\.")
-                + "/"
-                + peopleResource
-                + "/(\\d)+/";
-
-        Pattern p = Pattern.compile(regexToExtractIdFromUrl);
-
         ArrayNode residents = (ArrayNode) Optional.ofNullable(alderaanInformation)
                 .map(i -> i.get("residents"))
                 .filter(JsonNode::isArray)
@@ -179,19 +183,8 @@ public class InformationService {
                 .stream(residents.spliterator(), false) // FIXME: stream can be parallel?
                 .map(JsonNode::asText)
                 .peek(System.out::println)
-                .map(s -> {
-                    Matcher m = p.matcher(s);
-                    if(m.matches()) {
-                        String id = m.group(1);
-                        System.out.println("The person ID is " + id);
-                        return id;
-                    }
-                    // TODO: error handling?
-                    return StringUtils.EMPTY;
-                })
-                .peek(System.out::println)
-                .filter(StringUtils::isNotBlank)
-                .map(Integer::valueOf) // regex will ensure only strings with digits reach here
+                .map(regexUtils::extractPeopleIdFromUrl)
+                .filter(Objects::nonNull)
                 .anyMatch(personId -> personId.equals(leiaId));
 
         return residentIds;
