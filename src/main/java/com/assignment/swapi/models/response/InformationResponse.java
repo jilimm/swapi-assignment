@@ -4,15 +4,26 @@ import lombok.*;
 
 
 @NoArgsConstructor
-@AllArgsConstructor
 @Builder
 @Getter
 @Setter
 public class InformationResponse {
 
-    ResponseStarship starship;
+    ResponseStarship starship = new ResponseStarship();
 
-    Number crew;
+    Number crew = 0;
 
-    boolean isLeiaOnPlanet;
+    Boolean isLeiaOnPlanet = false;
+
+    public InformationResponse(ResponseStarship starship, Number crew, Boolean isLeiaOnPlanet) {
+        if (starship != null) {
+            this.starship = starship;
+        }
+        if (crew != null) {
+            this.crew = crew;
+        }
+        if (isLeiaOnPlanet != null) {
+            this.isLeiaOnPlanet = isLeiaOnPlanet;
+        }
+    }
 }
