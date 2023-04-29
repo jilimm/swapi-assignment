@@ -1,8 +1,8 @@
 package com.assignment.swapi.utils;
 
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -18,7 +18,7 @@ public class RegexUtils {
     public RegexUtils(@Value("${swapi.url}") String baseUrl,
                       @Value("${swapi.url.starships}") String starshipResourceParam,
                       @Value("${swapi.url.people}") String peopleResourceParam
-                      ) {
+    ) {
         REGEX_SWAPI_STARSHIP_EXTRACT_ID = Pattern.compile(baseUrl + "/"
                 + starshipResourceParam
                 + "/(\\d)+/");
@@ -29,7 +29,7 @@ public class RegexUtils {
 
     public Integer extractStarShipIdFromUrl(String url) {
         Matcher m = REGEX_SWAPI_STARSHIP_EXTRACT_ID.matcher(url);
-        if(m.matches()) {
+        if (m.matches()) {
             String id = m.group(1);
             if (StringUtils.isBlank(id)) {
                 return null;
@@ -47,7 +47,7 @@ public class RegexUtils {
 
     public Integer extractPeopleIdFromUrl(String url) {
         Matcher m = REGEX_SWAPI_PEOPLE_EXTRACT_ID.matcher(url);
-        if(m.matches()) {
+        if (m.matches()) {
             String id = m.group(1);
             if (StringUtils.isBlank(id)) {
                 return null;
@@ -62,9 +62,6 @@ public class RegexUtils {
         }
         return null;
     }
-
-
-
 
 
 }

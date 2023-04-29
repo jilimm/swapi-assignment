@@ -4,7 +4,6 @@ import com.assignment.swapi.models.response.InformationResponse;
 import com.assignment.swapi.models.response.ResponseStarship;
 import com.assignment.swapi.utils.RegexUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,11 +19,15 @@ import java.text.ParseException;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.StreamSupport;
 
 @Service
 @Slf4j
 public class InformationService {
+    // deafult values
+    public static final ResponseStarship DEFAULT_RESPONSE_STARSHIP = new ResponseStarship();
+    public static final Long DEFAULT_CREW_NUMBER = 0L;
+    public static final Boolean DEFAULT_LEIA_ON_ALDERAAN = false;
+    private static final NumberFormat US_NUMBER_FORMAT = NumberFormat.getNumberInstance(Locale.US);
     @Value("${swapi.url.path}")
     private String swapiPath;
     @Value("${swapi.url.people}")
@@ -41,31 +44,27 @@ public class InformationService {
     private int alderaanId;
     @Value("${swapi.url.starships.death-star.id}")
     private int deathStarId;
-
     @Autowired
     @Qualifier("swapiWebClient")
     private WebClient webClient;
-
     @Autowired
     private RegexUtils regexUtils;
-
-    private static final NumberFormat US_NUMBER_FORMAT = NumberFormat.getNumberInstance(Locale.US);
 
     public Mono<InformationResponse> getInformation() {
 
         Mono<ResponseStarship> responseStarship = getStarshipUrlOfDarthVader()
                 .flatMap(this::getStarShipInformationFromUrl)
-                .defaultIfEmpty(new ResponseStarship());
+                .defaultIfEmpty(DEFAULT_RESPONSE_STARSHIP);
         Mono<Long> crewNumber = getCrewOnDeathStar()
-                .defaultIfEmpty(0L);
+                .defaultIfEmpty(DEFAULT_CREW_NUMBER);
         Mono<Boolean> isLeiaOnAlderaan = isLeiaOnAlderaan()
-                .defaultIfEmpty(false);
+                .defaultIfEmpty(DEFAULT_LEIA_ON_ALDERAAN);
 
 
         return
                 Mono.zip(responseStarship, crewNumber, isLeiaOnAlderaan)
-                        .map(data->
-                    new InformationResponse(data.getT1(), data.getT2(), data.getT3()));
+                        .map(data ->
+                                new InformationResponse(data.getT1(), data.getT2(), data.getT3()));
     }
 
 
@@ -81,11 +80,11 @@ public class InformationService {
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, clientResponse -> Mono.empty())
                 .bodyToMono(JsonNode.class)
-                .map( jsonNode -> Optional.ofNullable(jsonNode.get("starships"))
-                            .filter(JsonNode::isArray)
-                            .filter(array -> array.size() > 0)
-                            .map(array -> array.get(0))
-                            .map(JsonNode::asText)
+                .map(jsonNode -> Optional.ofNullable(jsonNode.get("starships"))
+                        .filter(JsonNode::isArray)
+                        .filter(array -> array.size() > 0)
+                        .map(array -> array.get(0))
+                        .map(JsonNode::asText)
                 )
                 .flatMap(Mono::justOrEmpty)
                 .filter(StringUtils::isNotBlank);
@@ -95,9 +94,9 @@ public class InformationService {
     }
 
     private Mono<ResponseStarship> getStarShipInformationFromUrl(String urlPath) {
-        log.info("--- getting starship information from url: "+urlPath);
+        log.info("--- getting starship information from url: " + urlPath);
 
-        log.info("Starship URL: "+urlPath);
+        log.info("Starship URL: " + urlPath);
         Integer starShipId = regexUtils.extractStarShipIdFromUrl(urlPath);
 
         if (starShipId == null) {
@@ -108,7 +107,7 @@ public class InformationService {
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
                         .build(starshipsResource, starShipId)
-                        )
+                )
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, clientResponse -> Mono.empty())
                 .bodyToMono(ResponseStarship.class);
@@ -138,9 +137,10 @@ public class InformationService {
                             try {
                                 return US_NUMBER_FORMAT.parse(crewNumberString);
                             } catch (ParseException e) {
-                                log.error("Invalid crew number: {}",crewNumberString);
+                                log.error("Invalid crew number: {}", crewNumberString);
                                 return null;
-                            }}))
+                            }
+                        }))
                 .flatMap(Mono::justOrEmpty)
                 .map(Number::longValue)
                 .onErrorResume(e -> {
@@ -164,11 +164,11 @@ public class InformationService {
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, clientResponse -> Mono.empty())
                 .bodyToMono(JsonNode.class)
-                .map( jsonNode ->
-                     Optional.ofNullable(jsonNode)
-                            .map(i -> i.get("residents"))
-                            .filter(JsonNode::isArray)
-                            .filter(array -> array.size() > 0))
+                .map(jsonNode ->
+                        Optional.ofNullable(jsonNode)
+                                .map(i -> i.get("residents"))
+                                .filter(JsonNode::isArray)
+                                .filter(array -> array.size() > 0))
                 .flatMap(Mono::justOrEmpty)
                 .flatMapIterable(arrayNode -> arrayNode)
                 .filter(JsonNode::isTextual)
@@ -182,7 +182,6 @@ public class InformationService {
         return alderaanInformation;
 
     }
-
 
 
 }

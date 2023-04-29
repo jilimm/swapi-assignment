@@ -5,7 +5,6 @@ import com.assignment.swapi.service.InformationService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
-import reactor.core.publisher.Mono;
 
 @RestController
 public class InformationController {
@@ -18,7 +17,7 @@ public class InformationController {
         long timenow = System.currentTimeMillis();
         InformationResponse responseMono = informationService.getInformation().block();
         long timeend = System.currentTimeMillis();
-        System.out.println("time elapsed: "+ (timeend-timenow));
+        System.out.println("time elapsed: " + (timeend - timenow));
         return responseMono;
     }
 }

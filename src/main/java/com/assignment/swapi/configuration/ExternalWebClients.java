@@ -11,10 +11,24 @@ import reactor.core.publisher.Mono;
 
 @Configuration
 @Slf4j
-public class ExternalWebClients  {
+public class ExternalWebClients {
 
     @Value("${swapi.url}")
     private String swapiUrl;
+
+    private static ExchangeFilterFunction logRequest() {
+        return ExchangeFilterFunction.ofRequestProcessor(clientRequest -> {
+            log.info("INFO: {} \t {} {} ", clientRequest.logPrefix(), clientRequest.method(), clientRequest.url());
+            return Mono.just(clientRequest);
+        });
+    }
+
+    private static ExchangeFilterFunction logResponse() {
+        return ExchangeFilterFunction.ofResponseProcessor(clientResponse -> {
+            log.info("INFO: {} \t ResponseStatus {} ", clientResponse.logPrefix(), clientResponse.statusCode());
+            return Mono.just(clientResponse);
+        });
+    }
 
     @Bean(name = "swapiWebClient")
     public WebClient swapiWebClient(WebClient.Builder webClientBuilder) {
@@ -25,21 +39,6 @@ public class ExternalWebClients  {
                     exchangeFilterFunctions.add(logResponse());
                 })
                 .build();
-    }
-
-    private static ExchangeFilterFunction logRequest() {
-        return ExchangeFilterFunction.ofRequestProcessor(clientRequest -> {
-            log.info("INFO: {} \t {} {} ",clientRequest.logPrefix(),clientRequest.method(),clientRequest.url());
-            return Mono.just(clientRequest);
-        });
-    }
-
-
-    private static ExchangeFilterFunction logResponse() {
-        return ExchangeFilterFunction.ofResponseProcessor(clientResponse -> {
-            log.info("INFO: {} \t ResponseStatus {} ",clientResponse.logPrefix(),clientResponse.statusCode());
-            return Mono.just(clientResponse);
-        });
     }
 }
 
