@@ -18,12 +18,12 @@ public class ResponseStarship {
     // https://stackoverflow.com/questions/56503042/how-return-a-empty-json-in-spring-mvc
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    String name;
+    private String name;
 
-    String starshipClass;
+    private String starshipClass;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    String model;
+    private String model;
 
     @JsonGetter("class")
     @JsonInclude(JsonInclude.Include.NON_NULL)

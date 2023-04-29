@@ -15,7 +15,6 @@ public class InformationController {
 
     @GetMapping("/information")
     public InformationResponse getInformation() {
-        // TODO: to implement
         long timenow = System.currentTimeMillis();
         InformationResponse responseMono = informationService.getInformation().block();
         long timeend = System.currentTimeMillis();

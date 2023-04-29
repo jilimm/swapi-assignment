@@ -1,5 +1,6 @@
 package com.assignment.swapi.configuration;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -9,6 +10,7 @@ import reactor.core.publisher.Mono;
 
 
 @Configuration
+@Slf4j
 public class ExternalWebClients  {
 
     @Value("${swapi.url}")
@@ -27,7 +29,7 @@ public class ExternalWebClients  {
 
     private static ExchangeFilterFunction logRequest() {
         return ExchangeFilterFunction.ofRequestProcessor(clientRequest -> {
-            System.out.println("***INFO: "+clientRequest.logPrefix() + clientRequest.method() + " " + clientRequest.url());
+            log.info("INFO: {} \t {} {} ",clientRequest.logPrefix(),clientRequest.method(),clientRequest.url());
             return Mono.just(clientRequest);
         });
     }
@@ -35,7 +37,7 @@ public class ExternalWebClients  {
 
     private static ExchangeFilterFunction logResponse() {
         return ExchangeFilterFunction.ofResponseProcessor(clientResponse -> {
-            System.out.println("***INFO: "+clientResponse.logPrefix()+" Response status: "+ clientResponse.statusCode());
+            log.info("INFO: {} \t ResponseStatus {} ",clientResponse.logPrefix(),clientResponse.statusCode());
             return Mono.just(clientResponse);
         });
     }
