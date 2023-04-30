@@ -9,8 +9,6 @@ import java.util.regex.Pattern;
 
 @Component
 public class RegexUtils {
-
-
     public final Pattern REGEX_SWAPI_PEOPLE_EXTRACT_ID;
 
     public final Pattern REGEX_SWAPI_STARSHIP_EXTRACT_ID;
@@ -21,10 +19,10 @@ public class RegexUtils {
     ) {
         REGEX_SWAPI_STARSHIP_EXTRACT_ID = Pattern.compile(baseUrl + "/"
                 + starshipResourceParam
-                + "/(\\d)+/");
+                + "/(\\d+)/");
         REGEX_SWAPI_PEOPLE_EXTRACT_ID = Pattern.compile(baseUrl + "/"
                 + peopleResourceParam
-                + "/(\\d)+/");
+                + "/(\\d+)/");
     }
 
     public Integer extractStarShipIdFromUrl(String url) {

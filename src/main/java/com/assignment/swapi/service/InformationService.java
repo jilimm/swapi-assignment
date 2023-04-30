@@ -68,7 +68,7 @@ public class InformationService {
     }
 
 
-    private Mono<String> getStarshipUrlOfDarthVader() {
+    public Mono<String> getStarshipUrlOfDarthVader() {
         // get darth vader information
         // get starship url --> ping the starship???
         log.info("---- getting starship of darth vader-----");
@@ -93,7 +93,7 @@ public class InformationService {
 
     }
 
-    private Mono<ResponseStarship> getStarShipInformationFromUrl(String urlPath) {
+    public Mono<ResponseStarship> getStarShipInformationFromUrl(String urlPath) {
         log.info("--- getting starship information from url: " + urlPath);
 
         log.info("Starship URL: " + urlPath);
@@ -152,7 +152,7 @@ public class InformationService {
 
     }
 
-    private Mono<Boolean> isLeiaOnAlderaan() {
+    public Mono<Boolean> isLeiaOnAlderaan() {
 
         log.info("---- checking if leia on alderaan -----");
 
@@ -175,6 +175,7 @@ public class InformationService {
                 .map(JsonNode::asText)
                 .log()
                 .map(regexUtils::extractPeopleIdFromUrl)
+                .log()
                 .filter(Objects::nonNull)
                 .hasElement(leiaId);
 
