@@ -168,7 +168,6 @@ class InformationServiceTest {
 
     @BeforeEach
     public void setup() throws IOException {
-        System.out.println("--- Before called ----");
         informationService = new InformationService();
         ReflectionTestUtils.setField(informationService, "swapiPath", "/{resource}/{id}");
         ReflectionTestUtils.setField(informationService, "peopleResource", "people");
@@ -180,8 +179,7 @@ class InformationServiceTest {
         ReflectionTestUtils.setField(informationService, "deathStarId", 9);
 
 
-        String baseUrl = String.format("http://localhost:%s",
-                mockBackEnd.getPort());
+        String baseUrl = String.format("http://localhost:%s", mockBackEnd.getPort());
         ReflectionTestUtils.setField(informationService, "webClient", WebClient.create(baseUrl));
         ReflectionTestUtils.setField(informationService, "regexUtils", new RegexUtils(
                 "https://swapi.dev/api", "starships", "people"
@@ -243,6 +241,36 @@ class InformationServiceTest {
                 .verifyComplete();
 
     }
+
+    @Test
+    void handleSwapiErrorResponse() {
+        Dispatcher dispatcher404 = new Dispatcher() {
+            @Override
+            public MockResponse dispatch (RecordedRequest request) throws InterruptedException {
+                return new MockResponse().setResponseCode(404);
+            }
+        };
+        mockBackEnd.setDispatcher(dispatcher404);
+
+        Mono<Long> crewNumberMono = informationService.getCrewOnDeathStar();
+        StepVerifier.create(crewNumberMono).expectNextCount(0).verifyComplete();
+
+
+
+
+
+    }
+
+
+    // TODO:
+    // not happy cases
+    // 404: // get mockserver to only return 404, all methods shuold return empty??
+    // Crew -> empty body/ invalid integer body
+    //      -> no "crew" jsonNode
+    // Leia -> empty resident array
+    //      -> resident array does not contain leia
+    // DarthVader -> no starships/empty object
+
 
 
 }

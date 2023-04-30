@@ -173,9 +173,9 @@ public class InformationService {
                 .flatMapIterable(arrayNode -> arrayNode)
                 .filter(JsonNode::isTextual)
                 .map(JsonNode::asText)
+                // TODO: add client ID in log?
                 .log()
                 .map(regexUtils::extractPeopleIdFromUrl)
-                .log()
                 .filter(Objects::nonNull)
                 .hasElement(leiaId);
 
