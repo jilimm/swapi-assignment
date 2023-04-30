@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.text.NumberFormat;
@@ -126,7 +127,6 @@ public class InformationService {
                         .build(starshipsResource, deathStarId))
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, clientResponse -> Mono.empty())
-                .onStatus(HttpStatusCode::isError, response -> Mono.empty())
                 .bodyToMono(JsonNode.class)
                 .map(jsonNode -> Optional.ofNullable(jsonNode)
                         .map(i -> i.get("crew"))
@@ -157,7 +157,7 @@ public class InformationService {
         log.info("---- checking if leia on alderaan -----");
 
         // get alderaan information
-        Mono<Boolean> alderaanInformation = webClient.get()
+        Flux<Integer> alderaanInformation = webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
                         .build(planetsResource, alderaanId))
@@ -176,11 +176,17 @@ public class InformationService {
                 // TODO: add client ID in log?
                 .log()
                 .map(regexUtils::extractPeopleIdFromUrl)
-                .filter(Objects::nonNull)
-                .hasElement(leiaId);
+                .filter(Objects::nonNull);
 
+        boolean isNotEmpty = Boolean.TRUE.equals(alderaanInformation
+                .hasElements()
+                .block());
 
-        return alderaanInformation;
+        if (isNotEmpty) {
+            return alderaanInformation.hasElement(leiaId);
+        } else {
+            return Mono.empty();
+        }
 
     }
 

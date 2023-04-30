@@ -127,36 +127,38 @@ class InformationServiceTest {
             "}";
     private InformationService informationService;
 
+    private static final Dispatcher dispatcher = new Dispatcher() {
+
+        @Override
+        public MockResponse dispatch (RecordedRequest request) throws InterruptedException {
+
+            switch (request.getPath()) {
+                case "/starships/9":
+                    return  new MockResponse().setResponseCode(200)
+                            .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .setBody(MOCK_DEATH_STAR_RESPONSE);
+                case "/planets/2":
+                    return new MockResponse().setResponseCode(200)
+                            .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .setBody(MOCK_ALDERAAN_RESPONSE);
+                case "/people/4":
+                    return new MockResponse().setResponseCode(200)
+                            .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .setBody(MOCK_DART_VADER_RESPONSE);
+                case "/starships/13":
+                    return new MockResponse().setResponseCode(200)
+                            .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                            .setBody(MOCK_DARTH_VADER_STARSHIP_RESPONSE);
+
+            }
+            return new MockResponse().setResponseCode(404);
+        }
+    };
+
     @BeforeAll
     static void setUp() throws IOException {
         mockBackEnd = new MockWebServer();
-        Dispatcher dispatcher = new Dispatcher() {
 
-            @Override
-            public MockResponse dispatch (RecordedRequest request) throws InterruptedException {
-
-                switch (request.getPath()) {
-                    case "/starships/9":
-                        return  new MockResponse().setResponseCode(200)
-                                .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                                .setBody(MOCK_DEATH_STAR_RESPONSE);
-                    case "/planets/2":
-                        return new MockResponse().setResponseCode(200)
-                                .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                                .setBody(MOCK_ALDERAAN_RESPONSE);
-                    case "/people/4":
-                        return new MockResponse().setResponseCode(200)
-                                .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                                .setBody(MOCK_DART_VADER_RESPONSE);
-                    case "/starships/13":
-                        return new MockResponse().setResponseCode(200)
-                                .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                                .setBody(MOCK_DARTH_VADER_STARSHIP_RESPONSE);
-
-                }
-                return new MockResponse().setResponseCode(404);
-            }
-        };
         mockBackEnd.setDispatcher(dispatcher);
         mockBackEnd.start();
     }
@@ -255,10 +257,15 @@ class InformationServiceTest {
         Mono<Long> crewNumberMono = informationService.getCrewOnDeathStar();
         StepVerifier.create(crewNumberMono).expectNextCount(0).verifyComplete();
 
+        Mono<String> starShipUrlOfDarthVader = informationService.getStarshipUrlOfDarthVader();
+        StepVerifier.create(starShipUrlOfDarthVader).expectNextCount(0).verifyComplete();
+
+        Mono<Boolean> leiaOnAlderaan = informationService.isLeiaOnAlderaan();
+        StepVerifier.create(leiaOnAlderaan).expectNextCount(0).verifyComplete();
 
 
 
-
+       mockBackEnd.setDispatcher(dispatcher);
     }
 
 
