@@ -116,7 +116,7 @@ public class InformationService {
         return starshipInformation;
     }
 
-    private Mono<Long> getCrewOnDeathStar() {
+    public Mono<Long> getCrewOnDeathStar() {
 
         log.info("---- getting crew on death star -----");
 
