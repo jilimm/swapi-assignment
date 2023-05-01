@@ -1,5 +1,7 @@
 package com.assignment.swapi.service;
 
+import com.assignment.swapi.exceptions.BusinessException;
+import com.assignment.swapi.exceptions.SwapiHttpErrorException;
 import com.assignment.swapi.models.response.InformationResponse;
 import com.assignment.swapi.models.response.ResponseStarship;
 import com.assignment.swapi.utils.RegexUtils;
@@ -12,7 +14,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.text.NumberFormat;
@@ -54,12 +55,13 @@ public class InformationService {
     public Mono<InformationResponse> getInformation() {
 
         Mono<ResponseStarship> responseStarship = getStarshipUrlOfDarthVader()
+                // TODO: Handle error??
                 .flatMap(this::getStarShipInformationFromUrl)
-                .defaultIfEmpty(DEFAULT_RESPONSE_STARSHIP);
+                .onErrorReturn(DEFAULT_RESPONSE_STARSHIP);
         Mono<Long> crewNumber = getCrewOnDeathStar()
-                .defaultIfEmpty(DEFAULT_CREW_NUMBER);
+                .onErrorReturn(DEFAULT_CREW_NUMBER);
         Mono<Boolean> isLeiaOnAlderaan = isLeiaOnAlderaan()
-                .defaultIfEmpty(DEFAULT_LEIA_ON_ALDERAAN);
+                .onErrorReturn(DEFAULT_LEIA_ON_ALDERAAN);
 
 
         return
@@ -79,7 +81,8 @@ public class InformationService {
                         .path(swapiPath)
                         .build(peopleResource, darthVaderId))
                 .retrieve()
-                .onStatus(HttpStatusCode::isError, clientResponse -> Mono.empty())
+                .onStatus(HttpStatusCode::isError, clientResponse ->
+                        Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(JsonNode.class)
                 .map(jsonNode -> Optional.ofNullable(jsonNode.get("starships"))
                         .filter(JsonNode::isArray)
@@ -88,7 +91,8 @@ public class InformationService {
                         .map(JsonNode::asText)
                 )
                 .flatMap(Mono::justOrEmpty)
-                .filter(StringUtils::isNotBlank);
+                .filter(StringUtils::isNotBlank)
+                .switchIfEmpty(Mono.error( new BusinessException("No valid starship URL found for darth vader: "+darthVaderId)));
 
         return darthVaderStarShipUrl;
 
@@ -97,11 +101,10 @@ public class InformationService {
     public Mono<ResponseStarship> getStarShipInformationFromUrl(String urlPath) {
         log.info("--- getting starship information from url: " + urlPath);
 
-        log.info("Starship URL: " + urlPath);
         Integer starShipId = regexUtils.extractStarShipIdFromUrl(urlPath);
 
         if (starShipId == null) {
-            return Mono.empty(); // starship id is null / not valid
+            return Mono.error(new BusinessException("Invalid Starship URL. Does not contain valid starship ID.")); // starship id is null / not valid
         }
 
         Mono<ResponseStarship> starshipInformation = webClient.get()
@@ -110,7 +113,8 @@ public class InformationService {
                         .build(starshipsResource, starShipId)
                 )
                 .retrieve()
-                .onStatus(HttpStatusCode::isError, clientResponse -> Mono.empty())
+                .onStatus(HttpStatusCode::isError, clientResponse ->
+                        Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(ResponseStarship.class);
 
 
@@ -126,7 +130,8 @@ public class InformationService {
                         .path(swapiPath)
                         .build(starshipsResource, deathStarId))
                 .retrieve()
-                .onStatus(HttpStatusCode::isError, clientResponse -> Mono.empty())
+                .onStatus(HttpStatusCode::isError, clientResponse ->
+                        Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(JsonNode.class)
                 .map(jsonNode -> Optional.ofNullable(jsonNode)
                         .map(i -> i.get("crew"))
@@ -142,11 +147,8 @@ public class InformationService {
                             }
                         }))
                 .flatMap(Mono::justOrEmpty)
-                .map(Number::longValue)
-                .onErrorResume(e -> {
-                    log.error(e.getMessage());
-                    return Mono.empty();
-                });
+                .switchIfEmpty(Mono.error( new BusinessException("No valid crew number found in SWAPI response")))
+                .map(Number::longValue);
 
         return crew;
 
@@ -157,12 +159,13 @@ public class InformationService {
         log.info("---- checking if leia on alderaan -----");
 
         // get alderaan information
-        Flux<Integer> alderaanInformation = webClient.get()
+        Mono<Boolean> alderaanInformation = webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
                         .build(planetsResource, alderaanId))
                 .retrieve()
-                .onStatus(HttpStatusCode::isError, clientResponse -> Mono.empty())
+                .onStatus(HttpStatusCode::isError, clientResponse ->
+                        Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(JsonNode.class)
                 .map(jsonNode ->
                         Optional.ofNullable(jsonNode)
@@ -170,23 +173,16 @@ public class InformationService {
                                 .filter(JsonNode::isArray)
                                 .filter(array -> array.size() > 0))
                 .flatMap(Mono::justOrEmpty)
+                .switchIfEmpty(Mono.error( new BusinessException("No residents list found in SWAPI response")))
                 .flatMapIterable(arrayNode -> arrayNode)
                 .filter(JsonNode::isTextual)
                 .map(JsonNode::asText)
-                // TODO: add client ID in log?
                 .log()
                 .map(regexUtils::extractPeopleIdFromUrl)
-                .filter(Objects::nonNull);
+                .filter(Objects::nonNull)
+                .hasElement(leiaId);
 
-        boolean isNotEmpty = Boolean.TRUE.equals(alderaanInformation
-                .hasElements()
-                .block());
-
-        if (isNotEmpty) {
-            return alderaanInformation.hasElement(leiaId);
-        } else {
-            return Mono.empty();
-        }
+        return alderaanInformation;
 
     }
 

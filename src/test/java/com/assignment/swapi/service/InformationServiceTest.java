@@ -1,12 +1,16 @@
 package com.assignment.swapi.service;
 
+import com.assignment.swapi.exceptions.SwapiHttpErrorException;
 import com.assignment.swapi.models.response.InformationResponse;
 import com.assignment.swapi.models.response.ResponseStarship;
 import com.assignment.swapi.utils.RegexUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
+import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +18,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -21,12 +26,17 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.io.IOException;
+import java.util.Objects;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 
 @RunWith(MockitoJUnitRunner.class)
 class InformationServiceTest {
 
     static MockWebServer mockBackEnd;
+
+    static final ObjectMapper objectMapper = new ObjectMapper();
 
     private static final String MOCK_DEATH_STAR_RESPONSE = "{\n" +
             "\t\"name\": \"Death Star\",\n" +
@@ -125,6 +135,8 @@ class InformationServiceTest {
             "\t\"edited\": \"2014-12-20T21:23:49.889000Z\",\n" +
             "\t\"url\": \"https://swapi.dev/api/starships/13/\"\n" +
             "}";
+
+    private static final String DEFAULT_ERROR_RESPONSE = "{\"starship\":{},\"crew\":0,\"isLeiaOnPlanet\":false}";
     private InformationService informationService;
 
     private static final Dispatcher dispatcher = new Dispatcher() {
@@ -245,25 +257,54 @@ class InformationServiceTest {
     }
 
     @Test
-    void handleSwapiErrorResponse() {
+    void handleSwapiHttpErrorResponse() {
         Dispatcher dispatcher404 = new Dispatcher() {
             @Override
             public MockResponse dispatch (RecordedRequest request) throws InterruptedException {
-                return new MockResponse().setResponseCode(404);
+                return new MockResponse().setResponseCode(HttpStatus.NOT_FOUND.value());
             }
         };
         mockBackEnd.setDispatcher(dispatcher404);
 
         Mono<Long> crewNumberMono = informationService.getCrewOnDeathStar();
-        StepVerifier.create(crewNumberMono).expectNextCount(0).verifyComplete();
+        StepVerifier.create(crewNumberMono)
+                .expectErrorMatches(throwable -> throwable instanceof SwapiHttpErrorException &&
+                        throwable.getMessage().contains(String.valueOf(HttpStatus.NOT_FOUND.value())))
+                .verify();
 
         Mono<String> starShipUrlOfDarthVader = informationService.getStarshipUrlOfDarthVader();
-        StepVerifier.create(starShipUrlOfDarthVader).expectNextCount(0).verifyComplete();
+        StepVerifier.create(starShipUrlOfDarthVader)
+                .expectErrorMatches(throwable -> throwable instanceof SwapiHttpErrorException &&
+                        throwable.getMessage().contains(String.valueOf(HttpStatus.NOT_FOUND.value())))
+                .verify();
 
         Mono<Boolean> leiaOnAlderaan = informationService.isLeiaOnAlderaan();
-        StepVerifier.create(leiaOnAlderaan).expectNextCount(0).verifyComplete();
+        StepVerifier.create(leiaOnAlderaan)
+                .expectErrorMatches(throwable -> throwable instanceof SwapiHttpErrorException &&
+                        throwable.getMessage().contains(String.valueOf(HttpStatus.NOT_FOUND.value())))
+                .verify();
 
-
+        Mono<InformationResponse> informationResponseMono = informationService.getInformation();
+        StepVerifier.create(informationResponseMono)
+                .expectNextMatches(informationResponse ->
+                                Objects.nonNull(informationResponse.getStarship()) &&
+                                        informationResponse.getStarship().getName() == null &&
+                                        informationResponse.getStarship().getModel() == null &&
+                                        informationResponse.getStarship().getStarshipClass() == null &&
+                        informationResponse.getCrew().equals(0L) &&
+                                informationResponse.getIsLeiaOnPlanet().equals(false)
+                )
+                .verifyComplete();
+        String informationResponseBody = informationResponseMono
+                .map(value -> {
+                    try {
+                        return objectMapper.writeValueAsString(value);
+                    } catch (JsonProcessingException e) {
+                        return StringUtils.EMPTY;
+                    }
+                })
+                .block();
+        assertEquals(DEFAULT_ERROR_RESPONSE, informationResponseBody);
 
        mockBackEnd.setDispatcher(dispatcher);
     }
