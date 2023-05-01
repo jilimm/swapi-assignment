@@ -15,7 +15,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 
 import java.text.NumberFormat;
 import java.text.ParseException;
@@ -58,6 +61,11 @@ public class InformationService {
         // TODO: execute the Monos in parallel?
         //  https://stackoverflow.com/questions/48172582/is-it-possible-to-start-monos-in-parallel-and-aggregate-the-result
 
+        // https://www.appsdeveloperblog.com/reactor-execution-model-threading-and-schedulers/
+//        https://developer.okta.com/blog/2021/08/13/reactive-java
+        // https://stackoverflow.com/questions/66673282/schedulers-boundedelastic-appears-to-use-same-thread-for-processing
+//        https://spring.io/blog/2019/12/13/flight-of-the-flux-3-hopping-threads-and-schedulers
+
         Mono<ResponseStarship> responseStarship = getStarshipUrlOfDarthVader()
                 .flatMap(this::getStarShipInformationFromUrl)
                 .onErrorReturn(DEFAULT_RESPONSE_STARSHIP);
@@ -66,10 +74,9 @@ public class InformationService {
         Mono<Boolean> isLeiaOnAlderaan = isLeiaOnAlderaan()
                 .onErrorReturn(DEFAULT_LEIA_ON_ALDERAAN);
 
-
-
         return
                 Mono.zip(responseStarship, crewNumber, isLeiaOnAlderaan)
+                        .subscribeOn(Schedulers.parallel())
                         .map(data ->
                                 new InformationResponse(data.getT1(), data.getT2(), data.getT3()));
     }

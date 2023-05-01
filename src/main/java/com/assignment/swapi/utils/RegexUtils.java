@@ -32,13 +32,7 @@ public class RegexUtils {
             if (StringUtils.isBlank(id)) {
                 return null;
             }
-            try {
-                return Integer.valueOf(id);
-            } catch (NumberFormatException e) {
-                // TODO: not happy case where string is not really an integer
-                return null;
-            }
-
+            return Integer.valueOf(id);
         }
         return null;
     }
@@ -50,13 +44,7 @@ public class RegexUtils {
             if (StringUtils.isBlank(id)) {
                 return null;
             }
-            try {
-                return Integer.valueOf(id);
-            } catch (NumberFormatException e) {
-                // TODO: not happy case where string is not really an integer
-                return null;
-            }
-
+            return Integer.valueOf(id);
         }
         return null;
     }
