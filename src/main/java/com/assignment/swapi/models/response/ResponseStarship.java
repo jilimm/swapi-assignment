@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonSetter;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
-import lombok.ToString;
 
 
 @NoArgsConstructor
@@ -18,12 +17,12 @@ public class ResponseStarship {
     // https://stackoverflow.com/questions/56503042/how-return-a-empty-json-in-spring-mvc
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    String name;
+    private String name;
 
-    String starshipClass;
+    private String starshipClass;
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
-    String model;
+    private String model;
 
     @JsonGetter("class")
     @JsonInclude(JsonInclude.Include.NON_NULL)

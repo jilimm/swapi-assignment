@@ -10,9 +10,8 @@ import lombok.*;
 @Setter
 public class InformationResponse {
 
-    ResponseStarship starship;
+    private ResponseStarship starship;
+    private Number crew;
 
-    Number crew;
-
-    boolean isLeiaOnPlanet;
+    private Boolean isLeiaOnPlanet;
 }

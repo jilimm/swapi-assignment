@@ -14,11 +14,10 @@ public class InformationController {
 
     @GetMapping("/information")
     public InformationResponse getInformation() {
-        // TODO: to implement
-        long currentTime = System.currentTimeMillis();
-        InformationResponse response = informationService.getInformation();
-        long endTime = System.currentTimeMillis();
-        System.out.println("Time elapsed: "+(endTime-currentTime));
-        return response;
+        long timenow = System.currentTimeMillis();
+        InformationResponse responseMono = informationService.getInformation().block();
+        long timeend = System.currentTimeMillis();
+        System.out.println("time elapsed: " + (timeend - timenow));
+        return responseMono;
     }
 }

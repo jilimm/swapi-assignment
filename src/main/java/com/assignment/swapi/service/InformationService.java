@@ -1,27 +1,36 @@
 package com.assignment.swapi.service;
 
+import com.assignment.swapi.exceptions.ParseSwapiResponseExcpetion;
+import com.assignment.swapi.exceptions.SwapiHttpErrorException;
 import com.assignment.swapi.models.response.InformationResponse;
 import com.assignment.swapi.models.response.ResponseStarship;
+import com.assignment.swapi.utils.JsonNodeUtils;
 import com.assignment.swapi.utils.RegexUtils;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
+import reactor.core.publisher.Mono;
 
 import java.text.NumberFormat;
 import java.text.ParseException;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.stream.StreamSupport;
 
 @Service
+@Slf4j
 public class InformationService {
-
+    // deafult values
+    public static final ResponseStarship DEFAULT_RESPONSE_STARSHIP = new ResponseStarship();
+    public static final Long DEFAULT_CREW_NUMBER = 0L;
+    public static final Boolean DEFAULT_LEIA_ON_ALDERAAN = false;
+    private static final NumberFormat US_NUMBER_FORMAT = NumberFormat.getNumberInstance(Locale.US);
     @Value("${swapi.url.path}")
     private String swapiPath;
     @Value("${swapi.url.people}")
@@ -38,156 +47,141 @@ public class InformationService {
     private int alderaanId;
     @Value("${swapi.url.starships.death-star.id}")
     private int deathStarId;
-
     @Autowired
     @Qualifier("swapiWebClient")
     private WebClient webClient;
-
     @Autowired
     private RegexUtils regexUtils;
 
+    public Mono<InformationResponse> getInformation() {
 
-    public InformationResponse getInformation() {
+        // TODO: execute the Monos in parallel?
+        //  https://stackoverflow.com/questions/48172582/is-it-possible-to-start-monos-in-parallel-and-aggregate-the-result
 
-        // TODO: webflux can be done in parallel
-        String  starShipUrl = getStarshipUrlOfDarthVader();
-        ResponseStarship responseStarship = getStarShipInformationFromUrl(starShipUrl);
-        // ensure null starship gives empty json
-        // https://stackoverflow.com/questions/44837846/spring-boot-return-a-empty-json-instead-of-empty-body-when-returned-object-is-n
-        long crewNumber = getCrewOnDeathStar();
-        boolean isLeiaOnAlderaan = isLeiaOnAlderaan();
+        Mono<ResponseStarship> responseStarship = getStarshipUrlOfDarthVader()
+                .flatMap(this::getStarShipInformationFromUrl)
+                .onErrorReturn(DEFAULT_RESPONSE_STARSHIP);
+        Mono<Long> crewNumber = getCrewOnDeathStar()
+                .onErrorReturn(DEFAULT_CREW_NUMBER);
+        Mono<Boolean> isLeiaOnAlderaan = isLeiaOnAlderaan()
+                .onErrorReturn(DEFAULT_LEIA_ON_ALDERAAN);
 
-        return new InformationResponse(responseStarship, crewNumber, isLeiaOnAlderaan);
+
+
+        return
+                Mono.zip(responseStarship, crewNumber, isLeiaOnAlderaan)
+                        .map(data ->
+                                new InformationResponse(data.getT1(), data.getT2(), data.getT3()));
     }
 
 
-    private String getStarshipUrlOfDarthVader() {
-        // get darth vader information
-        // get starship url --> ping the starship???
-        System.out.println("---- getting starship of darth vader-----");
+    public Mono<String> getStarshipUrlOfDarthVader() {
+        log.info("---- getting starship of darth vader-----");
 
-        JsonNode darthVaderInformation = webClient.get()
+        Mono<String> darthVaderStarShipUrl = webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
                         .build(peopleResource, darthVaderId))
                 .retrieve()
+                .onStatus(HttpStatusCode::isError, clientResponse ->
+                        Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(JsonNode.class)
-                .block();
+                .map(jsonNode -> JsonNodeUtils.getOptionalArrayNodeFromJsonNode(jsonNode, "starships")
+                                .map(array -> array.get(0))
+                                .map(JsonNode::asText)
+                )
+                .flatMap(Mono::justOrEmpty)
+                .filter(StringUtils::isNotBlank)
+                .switchIfEmpty(Mono.error( new ParseSwapiResponseExcpetion("No valid starship URL found for darth vader: "+darthVaderId)));
 
-        if (darthVaderInformation != null) {
-            System.out.println(darthVaderInformation.toPrettyString());
-        }
-
-        String starshipUrl = Optional.ofNullable(darthVaderInformation)
-                .map(i -> i.get("starships"))
-                .filter(JsonNode::isArray)
-                .filter(array -> array.size() > 0)
-                .map(array -> array.get(0))
-                .map(JsonNode::asText)
-                // TODO: check that url is correct??? idk
-                .orElse(null);
-
-        return starshipUrl;
+        return darthVaderStarShipUrl;
 
     }
 
-    private ResponseStarship getStarShipInformationFromUrl(String urlPath) {
+    public Mono<ResponseStarship> getStarShipInformationFromUrl(String urlPath) {
+        log.info("--- getting starship information from url: " + urlPath);
 
-        if (StringUtils.isBlank(urlPath)) {
-            return new ResponseStarship(); // will return empty json body
+        Optional<Integer> starshipIdOptional = Optional.ofNullable(urlPath)
+                .map(regexUtils::extractStarShipIdFromUrl);
+
+        if (starshipIdOptional.isEmpty()) {
+            return Mono.error(new ParseSwapiResponseExcpetion("Invalid Starship URL. Does not contain valid starship ID."));
         }
 
-        System.out.println("Starship URL: "+urlPath);
-        Integer starShipId = regexUtils.extractStarShipIdFromUrl(urlPath);
-
-        if (starShipId == null) {
-            return new ResponseStarship(); // startship id is null / not valid
-        }
-
-        ResponseStarship starshipInformation = webClient.get()
+        Mono<ResponseStarship> starshipInformation = webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
-                        .build(starshipsResource, starShipId)
-                        )
+                        .build(starshipsResource, starshipIdOptional.get())
+                )
                 .retrieve()
-                .bodyToMono(ResponseStarship.class)
-                .block();
+                .onStatus(HttpStatusCode::isError, clientResponse ->
+                        Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
+                .bodyToMono(ResponseStarship.class);
 
 
         return starshipInformation;
     }
 
-    private long getCrewOnDeathStar() {
+    public Mono<Long> getCrewOnDeathStar() {
 
-        System.out.println("---- getting crew on death star -----");
+        log.info("---- getting crew on death star -----");
 
-        JsonNode deathStarInformation = webClient.get()
+        Mono<Long> crew = webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
                         .build(starshipsResource, deathStarId))
                 .retrieve()
+                .onStatus(HttpStatusCode::isError, clientResponse ->
+                        Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(JsonNode.class)
-                .block();
+                .map(jsonNode -> Optional.ofNullable(jsonNode)
+                        .map(i -> i.get("crew"))
+                        .filter(JsonNode::isTextual)
+                        .map(JsonNode::asText)
+                        .filter(StringUtils::isNotBlank)
+                        .map(crewNumberString -> {
+                            try {
+                                return US_NUMBER_FORMAT.parse(crewNumberString);
+                            } catch (ParseException e) {
+                                log.error("Invalid crew number: {}", crewNumberString);
+                                return null;
+                            }
+                        }))
+                .flatMap(Mono::justOrEmpty)
+                .switchIfEmpty(Mono.error( new ParseSwapiResponseExcpetion("No valid crew number found in SWAPI response")))
+                .map(Number::longValue);
 
-        if (deathStarInformation != null) {
-            System.out.println(deathStarInformation.toPrettyString());
-        }
-
-        String crewNumber = Optional.ofNullable(deathStarInformation)
-                .map(jsonNode -> jsonNode.get("crew"))
-                .map(JsonNode::asText)
-                .orElse(null);
-
-        if (StringUtils.isBlank(crewNumber)) {
-            return 0L; // no crew member found in REST API
-        }
-
-        NumberFormat usNumberFormat = NumberFormat.getNumberInstance(Locale.US);
-        try {
-            return usNumberFormat.parse(crewNumber).longValue();
-        } catch (ParseException e) {
-            // TODO: throw new business exception to be handled by exception handler
-            throw new RuntimeException(e);
-        }
+        return crew;
 
     }
 
-    private boolean isLeiaOnAlderaan() {
+    public Mono<Boolean> isLeiaOnAlderaan() {
 
-        System.out.println("---- checking if leia on alderaan -----");
+        log.info("---- checking if leia on alderaan -----");
 
         // get alderaan information
-        JsonNode alderaanInformation = webClient.get()
+        Mono<Boolean> alderaanInformation = webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
                         .build(planetsResource, alderaanId))
                 .retrieve()
+                .onStatus(HttpStatusCode::isError, clientResponse ->
+                        Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(JsonNode.class)
-                .block();
-
-        if (alderaanInformation != null) {
-            System.out.println(alderaanInformation.toPrettyString());
-        }
-
-        ArrayNode residents = (ArrayNode) Optional.ofNullable(alderaanInformation)
-                .map(i -> i.get("residents"))
-                .filter(JsonNode::isArray)
-                .filter(array -> array.size() > 0)
-                .orElse(null);
-
-        if (residents == null) {
-            return false; // planet has no residents
-        }
-
-        boolean residentIds = StreamSupport
-                .stream(residents.spliterator(), false) // FIXME: stream can be parallel?
+                .map(jsonNode -> JsonNodeUtils.getOptionalArrayNodeFromJsonNode(jsonNode, "residents"))
+                .flatMap(Mono::justOrEmpty)
+                .switchIfEmpty(Mono.error( new ParseSwapiResponseExcpetion("No residents list found in SWAPI response")))
+                .flatMapIterable(arrayNode -> arrayNode)
+                .filter(JsonNode::isTextual)
                 .map(JsonNode::asText)
-                .peek(System.out::println)
+                .log()
                 .map(regexUtils::extractPeopleIdFromUrl)
                 .filter(Objects::nonNull)
-                .anyMatch(personId -> personId.equals(leiaId));
+                .hasElement(leiaId);
 
-        return residentIds;
+        return alderaanInformation;
 
     }
+
+
 }
