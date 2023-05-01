@@ -1,9 +1,10 @@
 package com.assignment.swapi.service;
 
-import com.assignment.swapi.exceptions.BusinessException;
+import com.assignment.swapi.exceptions.ParseSwapiResponseExcpetion;
 import com.assignment.swapi.exceptions.SwapiHttpErrorException;
 import com.assignment.swapi.models.response.InformationResponse;
 import com.assignment.swapi.models.response.ResponseStarship;
+import com.assignment.swapi.utils.JsonNodeUtils;
 import com.assignment.swapi.utils.RegexUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.extern.slf4j.Slf4j;
@@ -66,6 +67,7 @@ public class InformationService {
                 .onErrorReturn(DEFAULT_LEIA_ON_ALDERAAN);
 
 
+
         return
                 Mono.zip(responseStarship, crewNumber, isLeiaOnAlderaan)
                         .map(data ->
@@ -74,8 +76,6 @@ public class InformationService {
 
 
     public Mono<String> getStarshipUrlOfDarthVader() {
-        // get darth vader information
-        // get starship url --> ping the starship???
         log.info("---- getting starship of darth vader-----");
 
         Mono<String> darthVaderStarShipUrl = webClient.get()
@@ -86,15 +86,13 @@ public class InformationService {
                 .onStatus(HttpStatusCode::isError, clientResponse ->
                         Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(JsonNode.class)
-                .map(jsonNode -> Optional.ofNullable(jsonNode.get("starships"))
-                        .filter(JsonNode::isArray)
-                        .filter(array -> array.size() > 0)
-                        .map(array -> array.get(0))
-                        .map(JsonNode::asText)
+                .map(jsonNode -> JsonNodeUtils.getOptionalArrayNodeFromJsonNode(jsonNode, "starships")
+                                .map(array -> array.get(0))
+                                .map(JsonNode::asText)
                 )
                 .flatMap(Mono::justOrEmpty)
                 .filter(StringUtils::isNotBlank)
-                .switchIfEmpty(Mono.error( new BusinessException("No valid starship URL found for darth vader: "+darthVaderId)));
+                .switchIfEmpty(Mono.error( new ParseSwapiResponseExcpetion("No valid starship URL found for darth vader: "+darthVaderId)));
 
         return darthVaderStarShipUrl;
 
@@ -103,16 +101,17 @@ public class InformationService {
     public Mono<ResponseStarship> getStarShipInformationFromUrl(String urlPath) {
         log.info("--- getting starship information from url: " + urlPath);
 
-        Integer starShipId = regexUtils.extractStarShipIdFromUrl(urlPath);
+        Optional<Integer> starshipIdOptional = Optional.ofNullable(urlPath)
+                .map(regexUtils::extractStarShipIdFromUrl);
 
-        if (starShipId == null) {
-            return Mono.error(new BusinessException("Invalid Starship URL. Does not contain valid starship ID.")); // starship id is null / not valid
+        if (starshipIdOptional.isEmpty()) {
+            return Mono.error(new ParseSwapiResponseExcpetion("Invalid Starship URL. Does not contain valid starship ID."));
         }
 
         Mono<ResponseStarship> starshipInformation = webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
-                        .build(starshipsResource, starShipId)
+                        .build(starshipsResource, starshipIdOptional.get())
                 )
                 .retrieve()
                 .onStatus(HttpStatusCode::isError, clientResponse ->
@@ -149,7 +148,7 @@ public class InformationService {
                             }
                         }))
                 .flatMap(Mono::justOrEmpty)
-                .switchIfEmpty(Mono.error( new BusinessException("No valid crew number found in SWAPI response")))
+                .switchIfEmpty(Mono.error( new ParseSwapiResponseExcpetion("No valid crew number found in SWAPI response")))
                 .map(Number::longValue);
 
         return crew;
@@ -169,13 +168,9 @@ public class InformationService {
                 .onStatus(HttpStatusCode::isError, clientResponse ->
                         Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(JsonNode.class)
-                .map(jsonNode ->
-                        Optional.ofNullable(jsonNode)
-                                .map(i -> i.get("residents"))
-                                .filter(JsonNode::isArray)
-                                .filter(array -> array.size() > 0))
+                .map(jsonNode -> JsonNodeUtils.getOptionalArrayNodeFromJsonNode(jsonNode, "residents"))
                 .flatMap(Mono::justOrEmpty)
-                .switchIfEmpty(Mono.error( new BusinessException("No residents list found in SWAPI response")))
+                .switchIfEmpty(Mono.error( new ParseSwapiResponseExcpetion("No residents list found in SWAPI response")))
                 .flatMapIterable(arrayNode -> arrayNode)
                 .filter(JsonNode::isTextual)
                 .map(JsonNode::asText)

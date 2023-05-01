@@ -1,20 +1,16 @@
 package com.assignment.swapi.service;
 
-import com.assignment.swapi.exceptions.BusinessException;
-import com.assignment.swapi.exceptions.SwapiHttpErrorException;
+import com.assignment.swapi.exceptions.ParseSwapiResponseExcpetion;
 import com.assignment.swapi.models.response.InformationResponse;
 import com.assignment.swapi.models.response.ResponseStarship;
 import com.assignment.swapi.utils.RegexUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.apache.commons.lang3.StringUtils;
-import org.json.JSONObject;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -22,7 +18,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -38,8 +33,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  * Unit Test for Information Service
  * SWAPI API returns 2XX HTTP status code
  * but response body is not valid
- *  - contains invalid information
- *  - does not contain relebant information
+ *  - json node contains invalid information
+ *  - json node does not exist in json response body
  */
 @RunWith(MockitoJUnitRunner.class)
 class InformationServiceSwapiResponseBodyErrorTest {
@@ -92,6 +87,15 @@ class InformationServiceSwapiResponseBodyErrorTest {
             return new MockResponse().setResponseCode(404);
         }
     };
+
+    private static final Dispatcher empty_json_dispatcher = new Dispatcher() {
+        @Override
+        public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+            return new MockResponse().setResponseCode(200)
+                    .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                    .setBody("{}");
+        }
+    };
     static MockWebServer mockBackEnd;
     private static InformationService informationService;
 
@@ -99,7 +103,6 @@ class InformationServiceSwapiResponseBodyErrorTest {
     static void setUp() throws IOException {
         mockBackEnd = new MockWebServer();
 
-        mockBackEnd.setDispatcher(dispatcher);
         mockBackEnd.start();
 
         informationService = new InformationService();
@@ -107,6 +110,10 @@ class InformationServiceSwapiResponseBodyErrorTest {
         ReflectionTestUtils.setField(informationService, "peopleResource", "people");
         ReflectionTestUtils.setField(informationService, "starshipsResource", "starships");
         ReflectionTestUtils.setField(informationService, "planetsResource", "planets");
+        ReflectionTestUtils.setField(informationService, "leiaId", 5);
+        ReflectionTestUtils.setField(informationService, "darthVaderId", 4);
+        ReflectionTestUtils.setField(informationService, "alderaanId", 2);
+        ReflectionTestUtils.setField(informationService, "deathStarId", 9);
 
         String baseUrl = String.format("http://localhost:%s", mockBackEnd.getPort());
         ReflectionTestUtils.setField(informationService, "webClient", WebClient.create(baseUrl));
@@ -121,18 +128,25 @@ class InformationServiceSwapiResponseBodyErrorTest {
     }
 
     @BeforeEach
-    public void setup() {
-        ReflectionTestUtils.setField(informationService, "leiaId", 5);
-        ReflectionTestUtils.setField(informationService, "darthVaderId", 4);
-        ReflectionTestUtils.setField(informationService, "alderaanId", 2);
-        ReflectionTestUtils.setField(informationService, "deathStarId", 9);
+    public void setup() throws IOException {
+        mockBackEnd.setDispatcher(dispatcher);
     }
 
     @Test
     void getCrewOnDeathStar() {
         Mono<Long> crewNumberMono = informationService.getCrewOnDeathStar();
         StepVerifier.create(crewNumberMono)
-                .expectErrorMatches(throwable -> throwable instanceof BusinessException &&
+                .expectErrorMatches(throwable -> throwable instanceof ParseSwapiResponseExcpetion &&
+                        throwable.getMessage().contains("No valid crew number found in SWAPI response"))
+                .verify();
+    }
+
+    @Test
+    void getCrewOnDeathStar_when_empty_response_then_exception_thrown() {
+        mockBackEnd.setDispatcher(empty_json_dispatcher);
+        Mono<Long> crewNumberMono = informationService.getCrewOnDeathStar();
+        StepVerifier.create(crewNumberMono)
+                .expectErrorMatches(throwable -> throwable instanceof ParseSwapiResponseExcpetion &&
                         throwable.getMessage().contains("No valid crew number found in SWAPI response"))
                 .verify();
     }
@@ -141,7 +155,18 @@ class InformationServiceSwapiResponseBodyErrorTest {
     void isLeiaOnAlderaan() {
         Mono<Boolean> leiaOnAlderaan = informationService.isLeiaOnAlderaan();
         StepVerifier.create(leiaOnAlderaan)
-                .expectErrorMatches(throwable -> throwable instanceof BusinessException &&
+                .expectErrorMatches(throwable -> throwable instanceof ParseSwapiResponseExcpetion &&
+                        throwable.getMessage().contains("No residents list found in SWAPI response"))
+                .verify();
+    }
+
+    @Test
+    void isLeiaOnAlderaan_when_empty_response_then_exception_thrown() {
+        mockBackEnd.setDispatcher(empty_json_dispatcher);
+
+        Mono<Boolean> leiaOnAlderaan = informationService.isLeiaOnAlderaan();
+        StepVerifier.create(leiaOnAlderaan)
+                .expectErrorMatches(throwable -> throwable instanceof ParseSwapiResponseExcpetion &&
                         throwable.getMessage().contains("No residents list found in SWAPI response"))
                 .verify();
     }
@@ -151,7 +176,17 @@ class InformationServiceSwapiResponseBodyErrorTest {
         Mono<ResponseStarship> starshipMono = informationService.getStarShipInformationFromUrl("invalidUrl");
 
         StepVerifier.create(starshipMono)
-                .expectErrorMatches(throwable -> throwable instanceof BusinessException &&
+                .expectErrorMatches(throwable -> throwable instanceof ParseSwapiResponseExcpetion &&
+                        throwable.getMessage().contains("Invalid Starship URL"))
+                .verify();
+    }
+
+    @Test
+    void getStarShipInformationFromUrl_when_url_null_exception_thrown() {
+        Mono<ResponseStarship> starshipMono = informationService.getStarShipInformationFromUrl(null);
+
+        StepVerifier.create(starshipMono)
+                .expectErrorMatches(throwable -> throwable instanceof ParseSwapiResponseExcpetion &&
                         throwable.getMessage().contains("Invalid Starship URL"))
                 .verify();
     }
@@ -160,13 +195,52 @@ class InformationServiceSwapiResponseBodyErrorTest {
     void getStarshipUrlOfDarthVader() {
         Mono<String> starShipUrlOfDarthVader = informationService.getStarshipUrlOfDarthVader();
         StepVerifier.create(starShipUrlOfDarthVader)
-                .expectErrorMatches(throwable -> throwable instanceof BusinessException &&
+                .expectErrorMatches(throwable -> throwable instanceof ParseSwapiResponseExcpetion &&
+                        throwable.getMessage().contains("No valid starship URL found"))
+                .verify();
+    }
+
+    @Test
+    void getStarshipUrlOfDarthVader_when_empty_response_then_exception_thrown() {
+        mockBackEnd.setDispatcher(empty_json_dispatcher);
+
+        Mono<String> starShipUrlOfDarthVader = informationService.getStarshipUrlOfDarthVader();
+        StepVerifier.create(starShipUrlOfDarthVader)
+                .expectErrorMatches(throwable -> throwable instanceof ParseSwapiResponseExcpetion &&
                         throwable.getMessage().contains("No valid starship URL found"))
                 .verify();
     }
 
     @Test
     void getInformation() {
+        Mono<InformationResponse> informationResponseMono = informationService.getInformation();
+        StepVerifier.create(informationResponseMono)
+                .expectNextMatches(informationResponse ->
+                        Objects.nonNull(informationResponse.getStarship()) &&
+                                informationResponse.getStarship().getName() == null &&
+                                informationResponse.getStarship().getModel() == null &&
+                                informationResponse.getStarship().getStarshipClass() == null &&
+                                informationResponse.getCrew().equals(0L) &&
+                                informationResponse.getIsLeiaOnPlanet().equals(false)
+                )
+                .verifyComplete();
+
+        String informationResponseBody = informationResponseMono
+                .map(value -> {
+                    try {
+                        return objectMapper.writeValueAsString(value);
+                    } catch (JsonProcessingException e) {
+                        return StringUtils.EMPTY;
+                    }
+                })
+                .block();
+        assertEquals(DEFAULT_ERROR_RESPONSE, informationResponseBody);
+    }
+
+    @Test
+    void getInformation_when_empty_response_then_default_response_returned() {
+        mockBackEnd.setDispatcher(empty_json_dispatcher);
+
         Mono<InformationResponse> informationResponseMono = informationService.getInformation();
         StepVerifier.create(informationResponseMono)
                 .expectNextMatches(informationResponse ->
@@ -191,16 +265,6 @@ class InformationServiceSwapiResponseBodyErrorTest {
 
 
     }
-
-
-    // TODO:
-    // not happy cases
-    // [x] 404: // get mockserver to only return 404, all methods shuold return empty??
-    // Crew -> empty body/ invalid integer body
-    //      -> no "crew" jsonNode
-    // Leia -> empty resident array
-    //      -> resident array does not contain leia
-    // DarthVader -> no starships/empty object
 
 
 }
