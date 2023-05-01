@@ -54,8 +54,10 @@ public class InformationService {
 
     public Mono<InformationResponse> getInformation() {
 
+        // TODO: execute the Monos in parallel?
+        //  https://stackoverflow.com/questions/48172582/is-it-possible-to-start-monos-in-parallel-and-aggregate-the-result
+
         Mono<ResponseStarship> responseStarship = getStarshipUrlOfDarthVader()
-                // TODO: Handle error??
                 .flatMap(this::getStarShipInformationFromUrl)
                 .onErrorReturn(DEFAULT_RESPONSE_STARSHIP);
         Mono<Long> crewNumber = getCrewOnDeathStar()

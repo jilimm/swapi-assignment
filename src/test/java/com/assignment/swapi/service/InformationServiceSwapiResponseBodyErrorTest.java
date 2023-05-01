@@ -1,12 +1,20 @@
 package com.assignment.swapi.service;
 
+import com.assignment.swapi.exceptions.BusinessException;
+import com.assignment.swapi.exceptions.SwapiHttpErrorException;
 import com.assignment.swapi.models.response.InformationResponse;
 import com.assignment.swapi.models.response.ResponseStarship;
 import com.assignment.swapi.utils.RegexUtils;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
+import org.apache.commons.lang3.StringUtils;
+import org.json.JSONObject;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -14,6 +22,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -21,26 +30,32 @@ import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import java.io.IOException;
+import java.util.Objects;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
+/**
+ * Unit Test for Information Service
+ * SWAPI API returns 2XX HTTP status code
+ * but response body is not valid
+ *  - contains invalid information
+ *  - does not contain relebant information
+ */
 @RunWith(MockitoJUnitRunner.class)
-class InformationServiceTest {
+class InformationServiceSwapiResponseBodyErrorTest {
 
-    private static final String MOCK_DEATH_STAR_RESPONSE = "{\n" +
-            "\t\"crew\": \"342,953\",\n" +
+    static final ObjectMapper objectMapper = new ObjectMapper();
+    private static final String DEATH_STAR_RESPONSE_WITH_INVALID_CREW_NUMBER = "{\n" +
+            "\t\"crew\": \"invalidNumber\",\n" +
             "\t\"url\": \"https://swapi.dev/api/starships/9/\"\n" +
             "}";
-    private static final String MOCK_ALDERAAN_RESPONSE = "{\n" +
-            "\t\"residents\": [\n" +
-            "\t\t\"https://swapi.dev/api/people/5/\",\n" +
-            "\t\t\"https://swapi.dev/api/people/68/\",\n" +
-            "\t\t\"https://swapi.dev/api/people/81/\"\n" +
-            "\t],\n" +
+    private static final String DEFAULT_ERROR_RESPONSE = "{\"starship\":{},\"crew\":0,\"isLeiaOnPlanet\":false}";
+    private static final String MOCK_ALDERAAN_RESPONSE_INVALID_RESIDENTS_LIST = "{\n" +
+            "\t\"residents\": \"invalidList\",\n" +
             "\t\"url\": \"https://swapi.dev/api/planets/2/\"\n" +
             "}";
-    private static final String MOCK_DART_VADER_RESPONSE = "{\n" +
+    private static final String MOCK_DART_VADER_RESPONSE_EMPTY_STARSHIPS_LIST = "{\n" +
             "\t\"starships\": [\n" +
-            "\t\t\"https://swapi.dev/api/starships/13/\"\n" +
             "\t],\n" +
             "\t\"url\": \"https://swapi.dev/api/people/4/\"\n" +
             "}";
@@ -50,26 +65,24 @@ class InformationServiceTest {
             "\t\"starship_class\": \"Starfighter\",\n" +
             "\t\"url\": \"https://swapi.dev/api/starships/13/\"\n" +
             "}";
-
-    private static final long EXPECTED_CREW_NUMBER = 342953L;
     private static final Dispatcher dispatcher = new Dispatcher() {
 
         @Override
-        public MockResponse dispatch(RecordedRequest request) throws InterruptedException {
+        public MockResponse dispatch(RecordedRequest request)  {
 
             switch (request.getPath()) {
                 case "/starships/9":
                     return new MockResponse().setResponseCode(200)
                             .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                            .setBody(MOCK_DEATH_STAR_RESPONSE);
+                            .setBody(DEATH_STAR_RESPONSE_WITH_INVALID_CREW_NUMBER);
                 case "/planets/2":
                     return new MockResponse().setResponseCode(200)
                             .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                            .setBody(MOCK_ALDERAAN_RESPONSE);
+                            .setBody(MOCK_ALDERAAN_RESPONSE_INVALID_RESIDENTS_LIST);
                 case "/people/4":
                     return new MockResponse().setResponseCode(200)
                             .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
-                            .setBody(MOCK_DART_VADER_RESPONSE);
+                            .setBody(MOCK_DART_VADER_RESPONSE_EMPTY_STARSHIPS_LIST);
                 case "/starships/13":
                     return new MockResponse().setResponseCode(200)
                             .setHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
@@ -80,7 +93,7 @@ class InformationServiceTest {
         }
     };
     static MockWebServer mockBackEnd;
-    static InformationService informationService;
+    private static InformationService informationService;
 
     @BeforeAll
     static void setUp() throws IOException {
@@ -94,6 +107,7 @@ class InformationServiceTest {
         ReflectionTestUtils.setField(informationService, "peopleResource", "people");
         ReflectionTestUtils.setField(informationService, "starshipsResource", "starships");
         ReflectionTestUtils.setField(informationService, "planetsResource", "planets");
+
         String baseUrl = String.format("http://localhost:%s", mockBackEnd.getPort());
         ReflectionTestUtils.setField(informationService, "webClient", WebClient.create(baseUrl));
         ReflectionTestUtils.setField(informationService, "regexUtils", new RegexUtils(
@@ -107,7 +121,7 @@ class InformationServiceTest {
     }
 
     @BeforeEach
-    public void setup() throws IOException {
+    public void setup() {
         ReflectionTestUtils.setField(informationService, "leiaId", 5);
         ReflectionTestUtils.setField(informationService, "darthVaderId", 4);
         ReflectionTestUtils.setField(informationService, "alderaanId", 2);
@@ -117,66 +131,64 @@ class InformationServiceTest {
     @Test
     void getCrewOnDeathStar() {
         Mono<Long> crewNumberMono = informationService.getCrewOnDeathStar();
-
         StepVerifier.create(crewNumberMono)
-                .expectNextMatches(l -> l.equals(EXPECTED_CREW_NUMBER))
-                .verifyComplete();
+                .expectErrorMatches(throwable -> throwable instanceof BusinessException &&
+                        throwable.getMessage().contains("No valid crew number found in SWAPI response"))
+                .verify();
     }
 
     @Test
     void isLeiaOnAlderaan() {
-        Mono<Boolean> crewNumberMono = informationService.isLeiaOnAlderaan();
-
-        StepVerifier.create(crewNumberMono)
-                .expectNextMatches(b -> b.equals(true))
-                .verifyComplete();
-    }
-
-    @Test
-    void isLeiaOnAlderaan_when_leia_not_in_alderaan_then_false() {
-        ReflectionTestUtils.setField(informationService, "leiaId", 20);
-        Mono<Boolean> crewNumberMono = informationService.isLeiaOnAlderaan();
-
-        StepVerifier.create(crewNumberMono)
-                .expectNextMatches(b -> b.equals(false))
-                .verifyComplete();
+        Mono<Boolean> leiaOnAlderaan = informationService.isLeiaOnAlderaan();
+        StepVerifier.create(leiaOnAlderaan)
+                .expectErrorMatches(throwable -> throwable instanceof BusinessException &&
+                        throwable.getMessage().contains("No residents list found in SWAPI response"))
+                .verify();
     }
 
     @Test
     void getStarShipInformationFromUrl() {
-        Mono<ResponseStarship> starshipMono = informationService.getStarShipInformationFromUrl("https://swapi.dev/api/starships/13/");
+        Mono<ResponseStarship> starshipMono = informationService.getStarShipInformationFromUrl("invalidUrl");
 
         StepVerifier.create(starshipMono)
-                .expectNextMatches(starship ->
-                        starship.getName().equals("TIE Advanced x1") &&
-                                starship.getModel().equals("Twin Ion Engine Advanced x1") &&
-                                starship.getStarshipClass().equals("Starfighter")
-                )
-                .verifyComplete();
+                .expectErrorMatches(throwable -> throwable instanceof BusinessException &&
+                        throwable.getMessage().contains("Invalid Starship URL"))
+                .verify();
     }
 
     @Test
     void getStarshipUrlOfDarthVader() {
-        Mono<String> darthVaderStarShipUrl = informationService.getStarshipUrlOfDarthVader();
-
-        StepVerifier.create(darthVaderStarShipUrl)
-                .expectNextMatches(url -> url.equals("https://swapi.dev/api/starships/13/"))
-                .verifyComplete();
+        Mono<String> starShipUrlOfDarthVader = informationService.getStarshipUrlOfDarthVader();
+        StepVerifier.create(starShipUrlOfDarthVader)
+                .expectErrorMatches(throwable -> throwable instanceof BusinessException &&
+                        throwable.getMessage().contains("No valid starship URL found"))
+                .verify();
     }
 
     @Test
     void getInformation() {
         Mono<InformationResponse> informationResponseMono = informationService.getInformation();
-
         StepVerifier.create(informationResponseMono)
                 .expectNextMatches(informationResponse ->
-                        informationResponse.getCrew().equals(EXPECTED_CREW_NUMBER) &&
-                                informationResponse.getIsLeiaOnPlanet().equals(true) &&
-                                informationResponse.getStarship().getName().equals("TIE Advanced x1") &&
-                                informationResponse.getStarship().getModel().equals("Twin Ion Engine Advanced x1") &&
-                                informationResponse.getStarship().getStarshipClass().equals("Starfighter")
+                        Objects.nonNull(informationResponse.getStarship()) &&
+                                informationResponse.getStarship().getName() == null &&
+                                informationResponse.getStarship().getModel() == null &&
+                                informationResponse.getStarship().getStarshipClass() == null &&
+                                informationResponse.getCrew().equals(0L) &&
+                                informationResponse.getIsLeiaOnPlanet().equals(false)
                 )
                 .verifyComplete();
+        String informationResponseBody = informationResponseMono
+                .map(value -> {
+                    try {
+                        return objectMapper.writeValueAsString(value);
+                    } catch (JsonProcessingException e) {
+                        return StringUtils.EMPTY;
+                    }
+                })
+                .block();
+        assertEquals(DEFAULT_ERROR_RESPONSE, informationResponseBody);
+
 
     }
 
