@@ -180,15 +180,4 @@ class InformationServiceTest {
 
     }
 
-
-    // TODO:
-    // not happy cases
-    // [x] 404: // get mockserver to only return 404, all methods shuold return empty??
-    // Crew -> empty body/ invalid integer body
-    //      -> no "crew" jsonNode
-    // Leia -> empty resident array
-    //      -> resident array does not contain leia
-    // DarthVader -> no starships/empty object
-
-
 }

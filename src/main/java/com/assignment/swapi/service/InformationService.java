@@ -29,7 +29,6 @@ import java.util.logging.Level;
 @Service
 @Slf4j
 public class InformationService {
-    // deafult values
     public static final ResponseStarship DEFAULT_RESPONSE_STARSHIP = new ResponseStarship();
     public static final Long DEFAULT_CREW_NUMBER = 0L;
     public static final Boolean DEFAULT_LEIA_ON_ALDERAAN = false;

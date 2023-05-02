@@ -12,10 +12,6 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class ResponseStarship {
 
-    // TODO: is there better way of making it empty json object?
-    // I'm just removing every null field name instead of making entire thing empty :/
-    // https://stackoverflow.com/questions/56503042/how-return-a-empty-json-in-spring-mvc
-
     @JsonInclude(JsonInclude.Include.NON_NULL)
     private String name;
 
