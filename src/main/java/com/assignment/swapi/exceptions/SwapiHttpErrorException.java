@@ -1,16 +1,18 @@
 package com.assignment.swapi.exceptions;
 
+import lombok.Getter;
 import org.springframework.http.HttpStatusCode;
 
-public class SwapiHttpErrorException extends  RuntimeException {
+@Getter
+public class SwapiHttpErrorException extends RuntimeException {
 
-    private String webClientResponseId;
+    private final String webClientResponseId;
 
-    private HttpStatusCode httpStatus;
+    private final HttpStatusCode httpStatus;
 
     public SwapiHttpErrorException(String webClientResponseId, HttpStatusCode httpStatus) {
         super(String.format("SWAPI Http Error for response Id: %s , with status code: %s",
-    webClientResponseId, httpStatus));
+                webClientResponseId, httpStatus));
         this.webClientResponseId = webClientResponseId;
         this.httpStatus = httpStatus;
     }
