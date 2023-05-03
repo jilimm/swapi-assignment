@@ -16,17 +16,19 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
+import reactor.core.scheduler.Schedulers;
 
 import java.text.NumberFormat;
 import java.text.ParseException;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.logging.Level;
 
 @Service
 @Slf4j
 public class InformationService {
-    // deafult values
     public static final ResponseStarship DEFAULT_RESPONSE_STARSHIP = new ResponseStarship();
     public static final Long DEFAULT_CREW_NUMBER = 0L;
     public static final Boolean DEFAULT_LEIA_ON_ALDERAAN = false;
@@ -55,30 +57,29 @@ public class InformationService {
 
     public Mono<InformationResponse> getInformation() {
 
-        // TODO: execute the Monos in parallel?
-        //  https://stackoverflow.com/questions/48172582/is-it-possible-to-start-monos-in-parallel-and-aggregate-the-result
-
         Mono<ResponseStarship> responseStarship = getStarshipUrlOfDarthVader()
                 .flatMap(this::getStarShipInformationFromUrl)
+                .doOnError(e -> log.error("Error occurred obtaining starship of Darth Vader", e))
                 .onErrorReturn(DEFAULT_RESPONSE_STARSHIP);
         Mono<Long> crewNumber = getCrewOnDeathStar()
+                .doOnError(e -> log.error("Error occurred obtaining crew numbers of Death Star", e))
                 .onErrorReturn(DEFAULT_CREW_NUMBER);
         Mono<Boolean> isLeiaOnAlderaan = isLeiaOnAlderaan()
+                .doOnError(e -> log.error("Error occurred checking if Leia is on Alderaan", e))
                 .onErrorReturn(DEFAULT_LEIA_ON_ALDERAAN);
-
 
 
         return
                 Mono.zip(responseStarship, crewNumber, isLeiaOnAlderaan)
+                        .subscribeOn(Schedulers.parallel())
                         .map(data ->
                                 new InformationResponse(data.getT1(), data.getT2(), data.getT3()));
     }
 
 
     public Mono<String> getStarshipUrlOfDarthVader() {
-        log.info("---- getting starship of darth vader-----");
 
-        Mono<String> darthVaderStarShipUrl = webClient.get()
+        return webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
                         .build(peopleResource, darthVaderId))
@@ -86,20 +87,18 @@ public class InformationService {
                 .onStatus(HttpStatusCode::isError, clientResponse ->
                         Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(JsonNode.class)
+                .log(String.valueOf(InformationService.class), Level.FINE, true, SignalType.ON_NEXT)
                 .map(jsonNode -> JsonNodeUtils.getOptionalArrayNodeFromJsonNode(jsonNode, "starships")
-                                .map(array -> array.get(0))
-                                .map(JsonNode::asText)
+                        .map(array -> array.get(0))
+                        .map(JsonNode::asText)
                 )
                 .flatMap(Mono::justOrEmpty)
                 .filter(StringUtils::isNotBlank)
-                .switchIfEmpty(Mono.error( new ParseSwapiResponseExcpetion("No valid starship URL found for darth vader: "+darthVaderId)));
-
-        return darthVaderStarShipUrl;
+                .switchIfEmpty(Mono.error(new ParseSwapiResponseExcpetion("No valid starship URL found for darth vader: " + darthVaderId)));
 
     }
 
     public Mono<ResponseStarship> getStarShipInformationFromUrl(String urlPath) {
-        log.info("--- getting starship information from url: " + urlPath);
 
         Optional<Integer> starshipIdOptional = Optional.ofNullable(urlPath)
                 .map(regexUtils::extractStarShipIdFromUrl);
@@ -108,7 +107,7 @@ public class InformationService {
             return Mono.error(new ParseSwapiResponseExcpetion("Invalid Starship URL. Does not contain valid starship ID."));
         }
 
-        Mono<ResponseStarship> starshipInformation = webClient.get()
+        return webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
                         .build(starshipsResource, starshipIdOptional.get())
@@ -117,16 +116,12 @@ public class InformationService {
                 .onStatus(HttpStatusCode::isError, clientResponse ->
                         Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(ResponseStarship.class);
-
-
-        return starshipInformation;
     }
 
     public Mono<Long> getCrewOnDeathStar() {
 
-        log.info("---- getting crew on death star -----");
 
-        Mono<Long> crew = webClient.get()
+        return webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
                         .build(starshipsResource, deathStarId))
@@ -134,6 +129,7 @@ public class InformationService {
                 .onStatus(HttpStatusCode::isError, clientResponse ->
                         Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(JsonNode.class)
+                .log(String.valueOf(InformationService.class), Level.FINE, true, SignalType.ON_NEXT)
                 .map(jsonNode -> Optional.ofNullable(jsonNode)
                         .map(i -> i.get("crew"))
                         .filter(JsonNode::isTextual)
@@ -148,19 +144,14 @@ public class InformationService {
                             }
                         }))
                 .flatMap(Mono::justOrEmpty)
-                .switchIfEmpty(Mono.error( new ParseSwapiResponseExcpetion("No valid crew number found in SWAPI response")))
+                .switchIfEmpty(Mono.error(new ParseSwapiResponseExcpetion("No valid crew number found in SWAPI response")))
                 .map(Number::longValue);
-
-        return crew;
 
     }
 
     public Mono<Boolean> isLeiaOnAlderaan() {
 
-        log.info("---- checking if leia on alderaan -----");
-
-        // get alderaan information
-        Mono<Boolean> alderaanInformation = webClient.get()
+        return webClient.get()
                 .uri(uriBuilder -> uriBuilder
                         .path(swapiPath)
                         .build(planetsResource, alderaanId))
@@ -168,20 +159,17 @@ public class InformationService {
                 .onStatus(HttpStatusCode::isError, clientResponse ->
                         Mono.error(new SwapiHttpErrorException(clientResponse.logPrefix(), clientResponse.statusCode())))
                 .bodyToMono(JsonNode.class)
+                .log(String.valueOf(InformationService.class), Level.FINE, true, SignalType.ON_NEXT)
                 .map(jsonNode -> JsonNodeUtils.getOptionalArrayNodeFromJsonNode(jsonNode, "residents"))
                 .flatMap(Mono::justOrEmpty)
-                .switchIfEmpty(Mono.error( new ParseSwapiResponseExcpetion("No residents list found in SWAPI response")))
+                .switchIfEmpty(Mono.error(new ParseSwapiResponseExcpetion("No residents list found in SWAPI response")))
                 .flatMapIterable(arrayNode -> arrayNode)
                 .filter(JsonNode::isTextual)
                 .map(JsonNode::asText)
-                .log()
                 .map(regexUtils::extractPeopleIdFromUrl)
                 .filter(Objects::nonNull)
                 .hasElement(leiaId);
 
-        return alderaanInformation;
-
     }
-
 
 }
